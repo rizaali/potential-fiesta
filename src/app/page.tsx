@@ -9,8 +9,6 @@ interface JournalEntry {
   title: string;
   content: string;
   created_at: string;
-  summary?: string | null;
-  emotion?: string | null;
 }
 
 export default function Home() {
@@ -48,32 +46,6 @@ export default function Home() {
     }
   };
 
-  const analyzeEntry = async (content: string): Promise<{ summary: string; emotion: string }> => {
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('API Error:', errorData);
-        throw new Error(errorData.error || 'Failed to analyze entry');
-      }
-
-      return await response.json();
-    } catch (error: any) {
-      console.error('Error analyzing entry:', error);
-      // Return default values instead of throwing, so entry still gets saved
-      return {
-        summary: 'Analysis unavailable',
-        emotion: 'neutral',
-      };
-    }
-  };
 
   const handleSave = async (entryData: { title: string; content: string }) => {
     if (modalMode === 'create') {
@@ -97,22 +69,6 @@ export default function Home() {
         }
 
         if (newEntry) {
-          // Optional: Analyze the entry for summary only (emotion is detected from keywords)
-          try {
-            const analysis = await analyzeEntry(entryData.content);
-
-            // Update entry with summary only (emotion detected from keywords in content)
-            await supabase
-              .from('journal_entries')
-              .update({
-                summary: analysis.summary,
-              })
-              .eq('id', newEntry.id);
-          } catch (error) {
-            // If analysis fails, entry is still saved - emotion will be detected from keywords
-            console.error('Analysis failed, but entry saved:', error);
-          }
-
           // Reload entries to get the updated data
           await loadEntries();
         }
@@ -139,22 +95,6 @@ export default function Home() {
           return;
         }
 
-        // Re-analyze the entry for summary if content changed (emotion detected from keywords)
-        if (entryData.content !== editingEntry.content) {
-          try {
-            const analysis = await analyzeEntry(entryData.content);
-
-            await supabase
-              .from('journal_entries')
-              .update({
-                summary: analysis.summary,
-              })
-              .eq('id', editingEntry.id);
-          } catch (error) {
-            // If analysis fails, entry is still updated - emotion will be detected from keywords
-            console.error('Analysis failed, but entry updated:', error);
-          }
-        }
 
         await loadEntries();
         setEditingEntry(null);
@@ -221,23 +161,69 @@ export default function Home() {
     // Combine title and content to check for keywords
     const textToCheck = `${title} ${content}`.toLowerCase();
     
-    // Happy - Yellow (check if content contains "happy")
+    // Happy - Yellow
     if (textToCheck.includes('happy')) {
       return {
         card: 'bg-yellow-200 dark:bg-yellow-900/40 border-yellow-400 dark:border-yellow-600',
         text: 'text-yellow-900 dark:text-yellow-100',
         textSecondary: 'text-yellow-800 dark:text-yellow-200',
         icon: 'text-yellow-800 hover:text-yellow-900 dark:text-yellow-200 dark:hover:text-yellow-100',
+        emoji: '😊',
       };
     }
     
-    // Sad - Blue (check if content contains "sad")
+    // Sad - Blue
     if (textToCheck.includes('sad')) {
       return {
         card: 'bg-blue-200 dark:bg-blue-900/40 border-blue-400 dark:border-blue-600',
         text: 'text-blue-900 dark:text-blue-100',
         textSecondary: 'text-blue-800 dark:text-blue-200',
         icon: 'text-blue-800 hover:text-blue-900 dark:text-blue-200 dark:hover:text-blue-100',
+        emoji: '😢',
+      };
+    }
+    
+    // Angry - Red
+    if (textToCheck.includes('angry')) {
+      return {
+        card: 'bg-red-200 dark:bg-red-900/40 border-red-400 dark:border-red-600',
+        text: 'text-red-900 dark:text-red-100',
+        textSecondary: 'text-red-800 dark:text-red-200',
+        icon: 'text-red-800 hover:text-red-900 dark:text-red-200 dark:hover:text-red-100',
+        emoji: '😠',
+      };
+    }
+    
+    // Sleepy - White
+    if (textToCheck.includes('sleepy')) {
+      return {
+        card: 'bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600',
+        text: 'text-zinc-900 dark:text-zinc-100',
+        textSecondary: 'text-zinc-700 dark:text-zinc-300',
+        icon: 'text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100',
+        emoji: '😴',
+      };
+    }
+    
+    // Jealous - Green
+    if (textToCheck.includes('jealous')) {
+      return {
+        card: 'bg-green-200 dark:bg-green-900/40 border-green-400 dark:border-green-600',
+        text: 'text-green-900 dark:text-green-100',
+        textSecondary: 'text-green-800 dark:text-green-200',
+        icon: 'text-green-800 hover:text-green-900 dark:text-green-200 dark:hover:text-green-100',
+        emoji: '😤',
+      };
+    }
+    
+    // Royal - Purple
+    if (textToCheck.includes('royal')) {
+      return {
+        card: 'bg-purple-200 dark:bg-purple-900/40 border-purple-400 dark:border-purple-600',
+        text: 'text-purple-900 dark:text-purple-100',
+        textSecondary: 'text-purple-800 dark:text-purple-200',
+        icon: 'text-purple-800 hover:text-purple-900 dark:text-purple-200 dark:hover:text-purple-100',
+        emoji: '👑',
       };
     }
     
@@ -247,6 +233,7 @@ export default function Home() {
       text: 'text-black dark:text-zinc-50',
       textSecondary: 'text-zinc-500 dark:text-zinc-400',
       icon: 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200',
+      emoji: null,
     };
   };
 
@@ -303,7 +290,7 @@ export default function Home() {
                   return (
                     <article
                       key={entry.id}
-                      className={`flex-shrink-0 w-80 rounded-lg shadow-sm border-2 p-6 hover:shadow-md transition-all ${emotionClasses.card}`}
+                      className={`flex-shrink-0 w-80 rounded-lg shadow-sm border-2 p-6 hover:shadow-md transition-all relative ${emotionClasses.card}`}
                     >
                       <div className="mb-4">
                         <div className="flex items-start justify-between mb-2">
@@ -362,14 +349,9 @@ export default function Home() {
                         </p>
                       </div>
 
-                      {entry.summary && (
-                        <div className={`mb-3 p-3 rounded-lg bg-white/50 dark:bg-black/20 backdrop-blur-sm`}>
-                          <p className={`text-xs font-medium mb-1 ${emotionClasses.textSecondary}`}>
-                            Summary
-                          </p>
-                          <p className={`text-sm ${emotionClasses.text}`}>
-                            {entry.summary}
-                          </p>
+                      {emotionClasses.emoji && (
+                        <div className="absolute bottom-4 right-4 text-3xl">
+                          {emotionClasses.emoji}
                         </div>
                       )}
                     </article>

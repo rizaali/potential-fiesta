@@ -16,21 +16,17 @@ Create a `.env.local` file in the root of your project with:
 ```
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-OPENAI_API_KEY=your_openai_api_key
 ```
 
-Replace the values with:
-- `your_supabase_project_url` and `your_supabase_anon_key` from Step 1
-- `your_openai_api_key` from OpenAI (get it at https://platform.openai.com/api-keys)
+Replace `your_supabase_project_url` and `your_supabase_anon_key` with the values from Step 1.
 
 ## Step 3: Create the Database Table
 
 1. In your Supabase dashboard, go to **SQL Editor**
-2. First, run the SQL from `supabase-schema.sql` to create the initial table
-3. Then, run the SQL from `supabase-schema-update.sql` to add the AI analysis fields (summary and emotion)
-4. Click **Run** to execute each SQL script
+2. Copy and paste the SQL from `supabase-schema.sql`
+3. Click **Run** to execute the SQL
 
-This will create the `journal_entries` table with all necessary fields including AI analysis columns.
+This will create the `journal_entries` table with the necessary structure.
 
 ## Step 4: Restart Your Development Server
 
