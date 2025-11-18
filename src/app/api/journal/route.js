@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateEmbedding } from '@/lib/embeddings';
 import { supabase } from '@/lib/supabase';
 
+// Set max duration to 60 seconds to allow sufficient time for embedding generation
+// This is especially important for the first request when the model needs to be downloaded
+export const maxDuration = 60;
+
 /**
  * POST /api/journal
  * Creates a new journal entry with an embedding vector
