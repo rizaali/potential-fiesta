@@ -21,10 +21,67 @@ export default function Home() {
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
 
-  // Load entries from Supabase on mount
+  // Test Supabase connection on mount
   useEffect(() => {
+    testSupabaseConnection();
     loadEntries();
   }, []);
+
+  const testSupabaseConnection = async () => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    // Skip test if using placeholder values
+    if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co' || !supabaseAnonKey || supabaseAnonKey === 'placeholder-key') {
+      console.warn('⚠️ Supabase connection test skipped: Using placeholder values');
+      console.warn('Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment variables');
+      return;
+    }
+
+    try {
+      console.log('🔍 Testing Supabase connection...');
+      console.log('URL:', supabaseUrl);
+      
+      // Test with a simple count query to the journal_entries table
+      const testUrl = `${supabaseUrl}/rest/v1/journal_entries?select=count`;
+      
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'count=exact',
+        },
+      });
+
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Supabase connection test successful!');
+        console.log('Response data:', data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Supabase connection test failed!');
+        console.error('Status:', response.status);
+        console.error('Status text:', response.statusText);
+        console.error('Error response:', errorText);
+      }
+    } catch (error: any) {
+      console.error('❌ Supabase connection test error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
+        console.error('💡 This looks like a network/DNS error. Check:');
+        console.error('   1. Is the Supabase URL correct?');
+        console.error('   2. Are you connected to the internet?');
+        console.error('   3. Is there a CORS issue?');
+      }
+    }
+  };
 
   const loadEntries = async () => {
     try {
