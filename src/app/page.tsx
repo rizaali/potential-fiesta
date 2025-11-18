@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import EntryModal from '@/components/EntryModal';
+import KnowledgeGraph from '@/components/KnowledgeGraph';
+import { buildKnowledgeGraph } from '@/lib/graphUtils';
 
 // Prevent static generation since we need client-side data fetching
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,7 @@ interface JournalEntry {
   title: string;
   content: string;
   created_at: string;
+  embedding?: number[];
 }
 
 export default function Home() {
@@ -20,6 +23,7 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
 
   // Test Supabase connection on mount
   useEffect(() => {
@@ -88,7 +92,7 @@ export default function Home() {
       setLoading(true);
       const { data, error } = await supabase
         .from('journal_entries')
-        .select('*')
+        .select('id, title, content, created_at, embedding')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -97,7 +101,12 @@ export default function Home() {
       }
 
       if (data) {
-        setEntries(data);
+        // Convert embedding arrays from database format if needed
+        const processedData = data.map(entry => ({
+          ...entry,
+          embedding: entry.embedding || undefined,
+        }));
+        setEntries(processedData);
       }
     } catch (error) {
       console.error('Error loading entries:', error);
@@ -309,6 +318,22 @@ export default function Home() {
     };
   };
 
+  // Build knowledge graph data
+  const graphData = useMemo(() => {
+    if (viewMode === 'graph' && entries.length > 0) {
+      return buildKnowledgeGraph(entries, 0.7);
+    }
+    return { nodes: [], links: [] };
+  }, [entries, viewMode]);
+
+  // Handle node click in graph
+  const handleNodeClick = (node: any) => {
+    const entry = entries.find(e => e.id === node.id);
+    if (entry) {
+      handleEdit(entry);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black font-sans">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
@@ -322,12 +347,37 @@ export default function Home() {
               Capture your thoughts and memories
             </p>
           </div>
-          <button
-            onClick={handleNewEntry}
-            className="px-6 py-3 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-black font-medium rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
-          >
-            + New Entry
-          </button>
+          <div className="flex gap-3">
+            {/* View Toggle */}
+            <div className="flex bg-zinc-200 dark:bg-zinc-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('graph')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'graph'
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                Graph
+              </button>
+            </div>
+            <button
+              onClick={handleNewEntry}
+              className="px-6 py-3 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-black font-medium rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
+            >
+              + New Entry
+            </button>
+          </div>
         </header>
 
         {/* Horizontal Scrollable Wheel */}
@@ -343,6 +393,14 @@ export default function Home() {
               <p className="text-zinc-500 dark:text-zinc-400 text-lg">
                 No entries yet. Start writing your first journal entry!
               </p>
+            </div>
+          ) : viewMode === 'graph' ? (
+            <div className="relative">
+              <KnowledgeGraph
+                nodes={graphData.nodes}
+                links={graphData.links}
+                onNodeClick={handleNodeClick}
+              />
             </div>
           ) : (
             <div 
