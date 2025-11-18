@@ -39,7 +39,7 @@ interface KnowledgeGraphProps {
 }
 
 export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeGraphProps) {
-  const graphRef = useRef<any>();
+  const graphRef = useRef<any>(null);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (onNodeClick) {
