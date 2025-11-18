@@ -59,7 +59,7 @@ export async function generateEmbedding(text) {
       throw new Error('Invalid response from OpenAI API: missing or empty data');
     }
 
-    const embedding = response.data[0].embedding;
+    let embedding = response.data[0].embedding;
     
     if (!embedding || !Array.isArray(embedding)) {
       throw new Error('Invalid embedding format: expected array, got ' + typeof embedding);
