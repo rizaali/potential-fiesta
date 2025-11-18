@@ -67,7 +67,7 @@ export default function Home() {
 
         if (error) {
           console.error('Error creating entry:', error);
-          alert('Failed to create entry. Please try again.');
+          alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
           return;
         }
 
@@ -75,9 +75,9 @@ export default function Home() {
           // Reload entries to get the updated data
           await loadEntries();
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error creating entry:', error);
-        alert('Failed to create entry. Please try again.');
+        alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
       }
     } else {
       // Edit existing entry

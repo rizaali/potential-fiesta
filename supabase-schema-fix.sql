@@ -1,6 +1,7 @@
--- Create the journal_entries table in Supabase
--- Run this SQL in your Supabase SQL Editor: https://app.supabase.com/project/_/sql
+-- Fix for existing table: Drop and recreate policy if needed
+-- Run this in your Supabase SQL Editor
 
+-- First, ensure the table exists
 CREATE TABLE IF NOT EXISTS journal_entries (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
@@ -8,14 +9,13 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
--- Enable Row Level Security (RLS)
+-- Enable Row Level Security
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policy if it exists, then recreate it
 DROP POLICY IF EXISTS "Allow all operations on journal_entries" ON journal_entries;
 
--- Create a policy that allows anyone to read and write entries
--- For production, you may want to add authentication and user-specific policies
+-- Create the policy
 CREATE POLICY "Allow all operations on journal_entries"
   ON journal_entries
   FOR ALL
