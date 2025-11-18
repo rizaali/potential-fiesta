@@ -1,16 +1,42 @@
-import OpenAI from 'openai';
+import { pipeline } from '@xenova/transformers';
 
-// Initialize OpenAI client
-// API key should be stored in OPENAI_API_KEY environment variable
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize the feature-extraction pipeline with the distilbert-base-uncased model
+// Cache the pipeline to avoid re-initialization on each request
+let embeddingPipeline = null;
+let pipelineInitializationError = null;
 
 /**
- * Generate an embedding vector for the given text using OpenAI's API
- * Uses text-embedding-3-small model which produces 1536-dimensional embeddings
+ * Initialize the embedding pipeline if not already initialized
+ * @returns {Promise} The initialized pipeline
+ */
+async function getEmbeddingPipeline() {
+  if (pipelineInitializationError) {
+    throw new Error(`Pipeline initialization previously failed: ${pipelineInitializationError.message}`);
+  }
+
+  if (!embeddingPipeline) {
+    try {
+      console.log('[Embeddings] Initializing feature-extraction pipeline with model: Xenova/distilbert-base-uncased');
+      embeddingPipeline = await pipeline(
+        'feature-extraction',
+        'Xenova/distilbert-base-uncased'
+      );
+      console.log('[Embeddings] Pipeline initialized successfully');
+    } catch (error) {
+      pipelineInitializationError = error;
+      console.error('[Embeddings] Failed to initialize pipeline:', error);
+      console.error('[Embeddings] Error stack:', error.stack);
+      throw new Error(`Failed to initialize embedding pipeline: ${error.message}`);
+    }
+  }
+  return embeddingPipeline;
+}
+
+/**
+ * Generate an embedding vector for the given text
+ * Note: distilbert-base-uncased produces 768-dimensional embeddings
  * @param {string} text - The text to generate an embedding for
- * @returns {Promise<number[]>} A 1536-dimensional array of floats
+ * @returns {Promise<number[]>} An embedding array (768 dimensions for distilbert-base-uncased)
  */
 export async function generateEmbedding(text) {
   const startTime = Date.now();
@@ -21,64 +47,100 @@ export async function generateEmbedding(text) {
       throw new Error('Text input is required and must be a non-empty string');
     }
 
-    // Validate API key is present
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY environment variable is not set');
-    }
-
-    console.log('[Embeddings] Starting OpenAI embedding generation for text length:', text.length);
+    console.log('[Embeddings] Starting embedding generation for text length:', text.length);
     
-    // Call OpenAI embeddings API
-    let response;
+    // Get or initialize the pipeline
+    let extractor;
     try {
-      response = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: text.trim(),
+      extractor = await getEmbeddingPipeline();
+      console.log('[Embeddings] Pipeline retrieved successfully');
+    } catch (pipelineError) {
+      console.error('[Embeddings] Pipeline retrieval failed:', pipelineError);
+      console.error('[Embeddings] Pipeline error stack:', pipelineError.stack);
+      throw pipelineError;
+    }
+    
+    // Generate the embedding
+    console.log('[Embeddings] Calling extractor with text...');
+    let output;
+    try {
+      output = await extractor(text, {
+        pooling: 'mean',
+        normalize: true,
       });
-      console.log('[Embeddings] OpenAI API call successful');
-    } catch (apiError) {
-      console.error('[Embeddings] OpenAI API call failed:', apiError);
-      console.error('[Embeddings] API error type:', apiError.constructor.name);
-      console.error('[Embeddings] API error message:', apiError.message);
-      console.error('[Embeddings] API error stack:', apiError.stack);
-      
-      // Handle specific OpenAI API errors
-      if (apiError.status === 401) {
-        throw new Error('OpenAI API authentication failed. Please check your API key.');
-      } else if (apiError.status === 429) {
-        throw new Error('OpenAI API rate limit exceeded. Please try again later.');
-      } else if (apiError.status === 500) {
-        throw new Error('OpenAI API server error. Please try again later.');
+      console.log('[Embeddings] Extractor returned output, type:', typeof output);
+      console.log('[Embeddings] Output keys:', output ? Object.keys(output) : 'null/undefined');
+    } catch (extractionError) {
+      console.error('[Embeddings] Extraction failed:', extractionError);
+      console.error('[Embeddings] Extraction error stack:', extractionError.stack);
+      throw new Error(`Failed to extract embedding: ${extractionError.message}`);
+    }
+
+    if (!output) {
+      throw new Error('Extractor returned null or undefined output');
+    }
+    
+    // Convert tensor to JavaScript array
+    // @xenova/transformers returns a tensor object with .data property
+    console.log('[Embeddings] Converting tensor to array...');
+    let embedding;
+    
+    try {
+      // Handle different possible output formats
+      if (output && typeof output.data !== 'undefined') {
+        // Standard tensor format with .data property
+        console.log('[Embeddings] Using output.data format');
+        embedding = Array.from(output.data);
+      } else if (Array.isArray(output)) {
+        // Already an array
+        console.log('[Embeddings] Output is already an array');
+        embedding = output;
+      } else if (output && typeof output.tolist === 'function') {
+        // Has tolist method
+        console.log('[Embeddings] Using tolist() method');
+        embedding = output.tolist();
+      } else if (output && output.tensor) {
+        // Nested tensor property
+        console.log('[Embeddings] Using nested tensor.data format');
+        embedding = Array.from(output.tensor.data);
       } else {
-        throw new Error(`OpenAI API error: ${apiError.message}`);
+        // Fallback: try to extract as array
+        console.log('[Embeddings] Using fallback extraction method');
+        const data = output?.data || output;
+        embedding = Array.isArray(data) ? data : Array.from(data || []);
       }
+      
+      // Flatten if nested (e.g., [[1,2,3]] -> [1,2,3])
+      if (Array.isArray(embedding[0]) && embedding.length === 1) {
+        console.log('[Embeddings] Flattening nested array');
+        embedding = embedding[0];
+      }
+      
+      console.log('[Embeddings] Converted embedding length:', embedding.length);
+      console.log('[Embeddings] First few values:', embedding.slice(0, 5));
+    } catch (conversionError) {
+      console.error('[Embeddings] Tensor conversion failed:', conversionError);
+      console.error('[Embeddings] Conversion error stack:', conversionError.stack);
+      console.error('[Embeddings] Output structure:', JSON.stringify(output, null, 2).substring(0, 500));
+      throw new Error(`Failed to convert tensor to array: ${conversionError.message}`);
     }
-
-    // Extract embedding from response
-    if (!response || !response.data || !Array.isArray(response.data) || response.data.length === 0) {
-      throw new Error('Invalid response from OpenAI API: missing or empty data');
-    }
-
-    let embedding = response.data[0].embedding;
     
+    // Validate embedding is not null/undefined
     if (!embedding || !Array.isArray(embedding)) {
-      throw new Error('Invalid embedding format: expected array, got ' + typeof embedding);
+      throw new Error(`Invalid embedding format: expected array, got ${typeof embedding}`);
     }
-
-    console.log('[Embeddings] Extracted embedding, length:', embedding.length);
-    console.log('[Embeddings] First few values:', embedding.slice(0, 5));
     
-    // Validate embedding dimensions (text-embedding-3-small produces 1536 dimensions)
-    const expectedDimensions = 1536;
+    // Ensure we have the expected dimensions (768 for distilbert-base-uncased)
+    const expectedDimensions = 768;
     if (embedding.length !== expectedDimensions) {
-      console.warn(`[Embeddings] Expected ${expectedDimensions} dimensions, got ${embedding.length}`);
-      // OpenAI should always return the correct dimensions, but handle edge cases
-      if (embedding.length < expectedDimensions) {
-        throw new Error(`Embedding dimension mismatch: got ${embedding.length}, expected ${expectedDimensions}`);
-      } else {
-        // If somehow we got more, truncate (shouldn't happen)
-        console.warn(`[Embeddings] Truncating embedding from ${embedding.length} to ${expectedDimensions} dimensions`);
+      console.warn(`[Embeddings] Expected ${expectedDimensions} dimensions, got ${embedding.length}. Attempting to fix...`);
+      // If we got a different size, try to extract the first N or pad/truncate
+      if (embedding.length > expectedDimensions) {
         embedding = embedding.slice(0, expectedDimensions);
+        console.log(`[Embeddings] Truncated to ${expectedDimensions} dimensions`);
+      } else if (embedding.length < expectedDimensions) {
+        // This shouldn't happen with distilbert-base-uncased, but handle it
+        throw new Error(`Embedding dimension mismatch: got ${embedding.length}, expected ${expectedDimensions}`);
       }
     }
     
