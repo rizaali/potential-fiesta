@@ -76,19 +76,21 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           return Math.max(5, Math.min(20, 5 + connections * 2));
         }}
         linkColor={() => 'rgba(156, 163, 175, 0.4)'} // gray links
-        linkWidth={(link: GraphLink) => Math.max(1, link.value * 3)}
+        linkWidth={(link: any) => Math.max(1, (link.value || link.similarity || 0.7) * 3)}
         linkDirectionalArrowLength={6}
         linkDirectionalArrowRelPos={1}
         linkCurvature={0.2}
-        onNodeClick={handleNodeClick}
+        onNodeClick={(node: any) => {
+          handleNodeClick(node as GraphNode);
+        }}
         cooldownTicks={100}
         onEngineStop={() => {
           if (graphRef.current) {
             graphRef.current.zoomToFit(400, 20);
           }
         }}
-        nodeCanvasObject={(node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-          const label = node.title;
+        nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+          const label = (node as GraphNode).title || node.id;
           const fontSize = 12 / globalScale;
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
