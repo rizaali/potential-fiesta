@@ -319,7 +319,7 @@ export default function Home() {
   };
 
   // Build knowledge graph data
-  const graphData = useMemo(() => {
+  const graphData = useMemo<{ nodes: any[]; links: any[] }>(() => {
     if (viewMode === 'graph' && entries.length > 0) {
       return buildKnowledgeGraph(entries, 0.7);
     }
