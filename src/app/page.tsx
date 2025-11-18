@@ -54,6 +54,11 @@ export default function Home() {
     if (modalMode === 'create') {
       // Create new entry
       try {
+        // Check if Supabase is properly configured
+        // Note: In Next.js, NEXT_PUBLIC_* vars are available at build time
+        // If they're not set, the placeholder values will be used
+        console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL || 'Not set');
+
         const { data: newEntry, error } = await supabase
           .from('journal_entries')
           .insert([
@@ -67,6 +72,7 @@ export default function Home() {
 
         if (error) {
           console.error('Error creating entry:', error);
+          console.error('Error details:', JSON.stringify(error, null, 2));
           alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
           return;
         }
@@ -77,7 +83,12 @@ export default function Home() {
         }
       } catch (error: any) {
         console.error('Error creating entry:', error);
-        alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
+        console.error('Error stack:', error.stack);
+        if (error.message?.includes('fetch')) {
+          alert('Network error: Unable to connect to Supabase. Please check your internet connection and Supabase configuration.');
+        } else {
+          alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
+        }
       }
     } else {
       // Edit existing entry
