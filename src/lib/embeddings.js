@@ -1,7 +1,8 @@
 import { pipeline } from '@xenova/transformers';
 
-// Initialize the feature-extraction pipeline with the all-MiniLM-L6-v2 model
+// Initialize the feature-extraction pipeline with the distilbert-base-uncased model
 // Cache the pipeline to avoid re-initialization on each request
+// Using smaller model for testing to diagnose if crashes are due to model size
 let embeddingPipeline = null;
 let pipelineInitializationError = null;
 
@@ -16,10 +17,10 @@ async function getEmbeddingPipeline() {
 
   if (!embeddingPipeline) {
     try {
-      console.log('[Embeddings] Initializing feature-extraction pipeline with model: Xenova/all-MiniLM-L6-v2');
+      console.log('[Embeddings] Initializing feature-extraction pipeline with model: Xenova/distilbert-base-uncased');
       embeddingPipeline = await pipeline(
         'feature-extraction',
-        'Xenova/all-MiniLM-L6-v2'
+        'Xenova/distilbert-base-uncased'
       );
       console.log('[Embeddings] Pipeline initialized successfully');
     } catch (error) {
@@ -33,9 +34,10 @@ async function getEmbeddingPipeline() {
 }
 
 /**
- * Generate a 384-dimensional embedding vector for the given text
+ * Generate an embedding vector for the given text
+ * Note: distilbert-base-uncased produces 768-dimensional embeddings
  * @param {string} text - The text to generate an embedding for
- * @returns {Promise<number[]>} A 384-dimensional array of floats
+ * @returns {Promise<number[]>} An embedding array (768 dimensions for distilbert-base-uncased)
  */
 export async function generateEmbedding(text) {
   const startTime = Date.now();
@@ -129,22 +131,23 @@ export async function generateEmbedding(text) {
       throw new Error(`Invalid embedding format: expected array, got ${typeof embedding}`);
     }
     
-    // Ensure we have exactly 384 dimensions
-    if (embedding.length !== 384) {
-      console.warn(`[Embeddings] Expected 384 dimensions, got ${embedding.length}. Attempting to fix...`);
-      // If we got a different size, try to extract the first 384 or pad/truncate
-      if (embedding.length > 384) {
-        embedding = embedding.slice(0, 384);
-        console.log('[Embeddings] Truncated to 384 dimensions');
-      } else if (embedding.length < 384) {
-        // This shouldn't happen with all-MiniLM-L6-v2, but handle it
-        throw new Error(`Embedding dimension mismatch: got ${embedding.length}, expected 384`);
+    // Ensure we have the expected dimensions (768 for distilbert-base-uncased)
+    const expectedDimensions = 768;
+    if (embedding.length !== expectedDimensions) {
+      console.warn(`[Embeddings] Expected ${expectedDimensions} dimensions, got ${embedding.length}. Attempting to fix...`);
+      // If we got a different size, try to extract the first N or pad/truncate
+      if (embedding.length > expectedDimensions) {
+        embedding = embedding.slice(0, expectedDimensions);
+        console.log(`[Embeddings] Truncated to ${expectedDimensions} dimensions`);
+      } else if (embedding.length < expectedDimensions) {
+        // This shouldn't happen with distilbert-base-uncased, but handle it
+        throw new Error(`Embedding dimension mismatch: got ${embedding.length}, expected ${expectedDimensions}`);
       }
     }
     
     // Final validation
-    if (!Array.isArray(embedding) || embedding.length !== 384) {
-      throw new Error(`Final validation failed: embedding is not a 384-element array`);
+    if (!Array.isArray(embedding) || embedding.length !== expectedDimensions) {
+      throw new Error(`Final validation failed: embedding is not a ${expectedDimensions}-element array`);
     }
     
     // Validate all values are numbers
@@ -154,7 +157,7 @@ export async function generateEmbedding(text) {
     }
     
     const duration = Date.now() - startTime;
-    console.log(`[Embeddings] Successfully generated 384-dimensional embedding in ${duration}ms`);
+    console.log(`[Embeddings] Successfully generated ${embedding.length}-dimensional embedding in ${duration}ms`);
     
     return embedding;
   } catch (error) {

@@ -50,8 +50,10 @@ export async function POST(request) {
         throw new Error(`Invalid embedding: expected array, got ${typeof embedding}`);
       }
       
-      if (embedding.length !== 384) {
-        throw new Error(`Invalid embedding dimensions: expected 384, got ${embedding.length}`);
+      // distilbert-base-uncased produces 768-dimensional embeddings
+      const expectedDimensions = 768;
+      if (embedding.length !== expectedDimensions) {
+        throw new Error(`Invalid embedding dimensions: expected ${expectedDimensions}, got ${embedding.length}`);
       }
       
       // Validate all values are numbers
@@ -81,12 +83,14 @@ export async function POST(request) {
     }
 
     // Final validation before insert
-    if (!embedding || !Array.isArray(embedding) || embedding.length !== 384) {
+    const expectedDimensions = 768; // distilbert-base-uncased produces 768 dimensions
+    if (!embedding || !Array.isArray(embedding) || embedding.length !== expectedDimensions) {
       console.error('[API] ========== CRITICAL: Embedding validation failed before insert ==========');
       console.error('[API] Embedding value:', embedding);
       console.error('[API] Embedding type:', typeof embedding);
       console.error('[API] Is array:', Array.isArray(embedding));
       console.error('[API] Length:', embedding?.length);
+      console.error('[API] Expected length:', expectedDimensions);
       console.error('[API] =================================================');
       return NextResponse.json(
         { 
