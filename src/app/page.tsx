@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import EntryModal from '@/components/EntryModal';
 
+// Prevent static generation since we need client-side data fetching
+export const dynamic = 'force-dynamic';
+
 interface JournalEntry {
   id: string;
   title: string;
