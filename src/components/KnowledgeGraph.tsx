@@ -62,16 +62,18 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
       <ForceGraph2D
         ref={graphRef}
         graphData={{ nodes, links }}
-        nodeLabel={(node: GraphNode) => `${node.title}`}
-        nodeColor={(node: GraphNode) => {
+        nodeLabel={(node: any) => `${(node as GraphNode).title || node.id}`}
+        nodeColor={(node: any) => {
           // Get color based on entry content
-          const textToCheck = `${node.title} ${node.content}`.toLowerCase();
-          return getNodeColor(node.title, node.content);
+          const graphNode = node as GraphNode;
+          const textToCheck = `${graphNode.title || ''} ${graphNode.content || ''}`.toLowerCase();
+          return getNodeColor(graphNode.title || '', graphNode.content || '');
         }}
-        nodeVal={(node: GraphNode) => {
+        nodeVal={(node: any) => {
           // Node size based on number of connections
+          const graphNode = node as GraphNode;
           const connections = links.filter(
-            (link) => link.source === node.id || link.target === node.id
+            (link) => link.source === graphNode.id || link.target === graphNode.id
           ).length;
           return Math.max(5, Math.min(20, 5 + connections * 2));
         }}
