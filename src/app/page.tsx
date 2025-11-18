@@ -109,40 +109,41 @@ export default function Home() {
 
   const handleSave = async (entryData: { title: string; content: string }) => {
     if (modalMode === 'create') {
-      // Create new entry
+      // Create new entry via API route (which generates embeddings)
       try {
-        // Check if Supabase is properly configured
-        // Note: In Next.js, NEXT_PUBLIC_* vars are available at build time
-        // If they're not set, the placeholder values will be used
-        console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL || 'Not set');
+        console.log('[Frontend] Creating journal entry via API route...');
+        
+        const response = await fetch('/api/journal', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: entryData.title,
+            content: entryData.content,
+          }),
+        });
 
-        const { data: newEntry, error } = await supabase
-          .from('journal_entries')
-          .insert([
-            {
-              title: entryData.title,
-              content: entryData.content,
-            },
-          ])
-          .select()
-          .single();
+        const result = await response.json();
 
-        if (error) {
-          console.error('Error creating entry:', error);
-          console.error('Error details:', JSON.stringify(error, null, 2));
-          alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
+        if (!response.ok) {
+          console.error('[Frontend] API error:', result);
+          alert(`Failed to create entry: ${result.error || result.details || 'Unknown error'}. Please check the browser console for details.`);
           return;
         }
 
-        if (newEntry) {
+        if (result.success && result.data) {
+          console.log('[Frontend] Entry created successfully with embedding');
           // Reload entries to get the updated data
           await loadEntries();
+        } else {
+          throw new Error('Unexpected response format from API');
         }
       } catch (error: any) {
-        console.error('Error creating entry:', error);
-        console.error('Error stack:', error.stack);
-        if (error.message?.includes('fetch')) {
-          alert('Network error: Unable to connect to Supabase. Please check your internet connection and Supabase configuration.');
+        console.error('[Frontend] Error creating entry:', error);
+        console.error('[Frontend] Error stack:', error.stack);
+        if (error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
+          alert('Network error: Unable to connect to the API. Please check your internet connection.');
         } else {
           alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
         }
