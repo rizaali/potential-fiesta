@@ -34,23 +34,68 @@ export async function POST(request) {
     }
 
     // Generate embedding for the content
-    console.log('Generating embedding for journal entry...');
+    console.log('[API] Starting embedding generation for journal entry...');
+    console.log('[API] Content length:', content.length);
     let embedding;
     try {
       embedding = await generateEmbedding(content);
-      console.log(`Generated embedding with ${embedding.length} dimensions`);
+      console.log(`[API] Embedding generated successfully with ${embedding.length} dimensions`);
+      
+      // Validate embedding before proceeding
+      if (!embedding || !Array.isArray(embedding)) {
+        throw new Error(`Invalid embedding: expected array, got ${typeof embedding}`);
+      }
+      
+      if (embedding.length !== 384) {
+        throw new Error(`Invalid embedding dimensions: expected 384, got ${embedding.length}`);
+      }
+      
+      // Validate all values are numbers
+      const invalidValues = embedding.filter(v => typeof v !== 'number' || isNaN(v));
+      if (invalidValues.length > 0) {
+        throw new Error(`Embedding contains ${invalidValues.length} invalid values`);
+      }
+      
+      console.log('[API] Embedding validation passed');
+      console.log('[API] Embedding sample (first 5 values):', embedding.slice(0, 5));
     } catch (embeddingError) {
-      console.error('Error generating embedding:', embeddingError);
-      // Continue without embedding if generation fails
-      // You can choose to return an error here if embedding is required
+      console.error('[API] ========== EMBEDDING GENERATION FAILED ==========');
+      console.error('[API] Error type:', embeddingError.constructor.name);
+      console.error('[API] Error message:', embeddingError.message);
+      console.error('[API] Error stack:', embeddingError.stack);
+      console.error('[API] =================================================');
+      
+      // DO NOT insert with NULL embedding - return error instead
       return NextResponse.json(
-        { error: `Failed to generate embedding: ${embeddingError.message}` },
+        { 
+          error: 'Failed to generate embedding',
+          details: embeddingError.message,
+          stack: process.env.NODE_ENV === 'development' ? embeddingError.stack : undefined
+        },
+        { status: 500 }
+      );
+    }
+
+    // Final validation before insert
+    if (!embedding || !Array.isArray(embedding) || embedding.length !== 384) {
+      console.error('[API] ========== CRITICAL: Embedding validation failed before insert ==========');
+      console.error('[API] Embedding value:', embedding);
+      console.error('[API] Embedding type:', typeof embedding);
+      console.error('[API] Is array:', Array.isArray(embedding));
+      console.error('[API] Length:', embedding?.length);
+      console.error('[API] =================================================');
+      return NextResponse.json(
+        { 
+          error: 'Invalid embedding: cannot insert with NULL or invalid embedding',
+          details: 'Embedding validation failed before database insert'
+        },
         { status: 500 }
       );
     }
 
     // Insert into Supabase
-    console.log('Inserting journal entry into Supabase...');
+    console.log('[API] Inserting journal entry into Supabase with embedding...');
+    console.log('[API] Embedding dimensions:', embedding.length);
     const { data, error } = await supabase
       .from('journal_entries')
       .insert([
