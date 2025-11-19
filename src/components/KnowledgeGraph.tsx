@@ -211,35 +211,26 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           return Math.max(5, Math.min(20, 5 + connections * 2));
         }}
         linkColor={(link: any) => {
-          // Use vibrant colors that work on both light and dark backgrounds
-          const strength = link.strength || 'medium';
-          if (strength === 'strong') {
-            return 'rgba(34, 197, 94, 0.8)'; // Bright green for strong connections
-          } else if (strength === 'medium') {
-            return 'rgba(59, 130, 246, 0.7)'; // Bright blue for medium connections
-          } else {
-            return 'rgba(236, 72, 153, 0.6)'; // Pink for weak connections
-          }
+          // Use a consistent color for all links
+          return 'rgba(59, 130, 246, 0.6)'; // Blue for all connections
         }}
         linkWidth={(link: any) => {
-          // Use strength categories for visual differentiation
-          const strength = link.strength || 'medium';
-          if (strength === 'strong') {
-            return 4; // Bold lines for strong connections
-          } else if (strength === 'medium') {
-            return 2; // Medium lines for medium connections
-          } else {
-            return 1; // Thin lines for weak connections
-          }
+          // Calculate line thickness based on similarity percentage
+          // 100% similarity = max thickness (10px), 1% similarity = min thickness (0.5px)
+          const similarity = link.similarity || 0;
+          const similarityPercent = similarity * 100; // Convert to percentage (0-100)
+          
+          // Map 1-100% to 0.5-10px thickness
+          // Formula: thickness = 0.5 + (similarityPercent - 1) * (10 - 0.5) / (100 - 1)
+          const minThickness = 0.5;
+          const maxThickness = 10;
+          const thickness = minThickness + (similarityPercent - 1) * (maxThickness - minThickness) / 99;
+          
+          return Math.max(minThickness, Math.min(maxThickness, thickness));
         }}
-        linkDirectionalArrowLength={6}
-        linkDirectionalArrowRelPos={1}
         linkCurvature={0.2}
         linkCanvasObject={(link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-          // Draw custom link with dashed pattern for weak connections
-          const isDotted = link.isDotted || false;
-          const strength = link.strength || 'medium';
-          
+          // Draw custom link with thickness based on similarity
           // Get link coordinates
           const start = typeof link.source === 'object' ? link.source : null;
           const end = typeof link.target === 'object' ? link.target : null;
@@ -248,62 +239,24 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
             return; // Skip if coordinates are not available
           }
           
-          // Set line style based on strength
-          let lineWidth;
-          let color;
+          // Calculate line thickness based on similarity (same as linkWidth)
+          const similarity = link.similarity || 0;
+          const similarityPercent = similarity * 100;
+          const minThickness = 0.5;
+          const maxThickness = 10;
+          const thickness = minThickness + (similarityPercent - 1) * (maxThickness - minThickness) / 99;
+          const lineWidth = Math.max(minThickness, Math.min(maxThickness, thickness));
           
-          if (strength === 'strong') {
-            lineWidth = 4;
-            color = 'rgba(34, 197, 94, 0.8)'; // Bright green
-          } else if (strength === 'medium') {
-            lineWidth = 2;
-            color = 'rgba(59, 130, 246, 0.7)'; // Bright blue
-          } else {
-            lineWidth = 1;
-            color = 'rgba(236, 72, 153, 0.6)'; // Pink
-          }
-          
-          ctx.strokeStyle = color;
+          // Set line style
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.6)'; // Blue
           ctx.lineWidth = lineWidth;
+          ctx.setLineDash([]); // Always solid line
           
-          // Set dash pattern for weak connections
-          if (isDotted) {
-            ctx.setLineDash([5, 5]); // 5px dash, 5px gap
-          } else {
-            ctx.setLineDash([]); // Solid line
-          }
-          
-          // Draw the line
+          // Draw the line (no arrows)
           ctx.beginPath();
           ctx.moveTo(start.x, start.y);
           ctx.lineTo(end.x, end.y);
           ctx.stroke();
-          
-          // Draw arrow for directional links
-          const arrowLength = 6;
-          const arrowRelPos = 1; // Position at end of link
-          const dx = end.x - start.x;
-          const dy = end.y - start.y;
-          const angle = Math.atan2(dy, dx);
-          const arrowX = start.x + dx * arrowRelPos;
-          const arrowY = start.y + dy * arrowRelPos;
-          
-          // Draw arrowhead
-          ctx.beginPath();
-          ctx.moveTo(arrowX, arrowY);
-          ctx.lineTo(
-            arrowX - arrowLength * Math.cos(angle - Math.PI / 6),
-            arrowY - arrowLength * Math.sin(angle - Math.PI / 6)
-          );
-          ctx.moveTo(arrowX, arrowY);
-          ctx.lineTo(
-            arrowX - arrowLength * Math.cos(angle + Math.PI / 6),
-            arrowY - arrowLength * Math.sin(angle + Math.PI / 6)
-          );
-          ctx.stroke();
-          
-          // Reset line dash
-          ctx.setLineDash([]);
         }}
         linkCanvasObjectMode={() => 'replace'} // Replace default link rendering
         onNodeClick={(node: any) => {
@@ -316,16 +269,39 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         }}
         nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
           const label = (node as GraphNode).title || node.id;
-          const fontSize = Math.max(10, 12 / globalScale); // Minimum readable size
-          ctx.font = `${fontSize}px Sans-Serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          // Use white text with dark outline for visibility on all backgrounds
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.lineWidth = 3;
-          ctx.fillStyle = 'rgba(255, 255, 255, 1)';
           const x = node.x || 0;
           const y = node.y || 0;
+          
+          // Calculate node radius from nodeVal (which returns the radius)
+          // Count connections to estimate node size
+          const graphNode = node as GraphNode;
+          const connections = links.filter(
+            (link) => getEntryId(link.source) === graphNode.id || getEntryId(link.target) === graphNode.id
+          ).length;
+          const nodeRadius = Math.max(5, Math.min(20, 5 + connections * 2));
+          
+          // Calculate font size to fit within node, accounting for zoom
+          // Use 60% of node diameter to ensure text fits comfortably
+          // Font size should scale with zoom to remain readable
+          const maxTextWidth = (nodeRadius * 2 * 0.6);
+          const baseFontSize = 12;
+          // Estimate character width (roughly 0.6 * fontSize for most fonts)
+          const estimatedCharWidth = baseFontSize * 0.6;
+          const maxChars = Math.floor(maxTextWidth / estimatedCharWidth);
+          const fontSize = Math.max(8, Math.min(baseFontSize, (maxTextWidth / Math.max(label.length, 1)) * 1.2));
+          
+          // Scale font size with zoom to keep it consistent
+          const scaledFontSize = fontSize / Math.max(0.5, Math.min(2, globalScale));
+          
+          ctx.font = `${scaledFontSize}px Sans-Serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Use white text with dark outline for visibility on all backgrounds
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.lineWidth = Math.max(1, 2 / Math.max(0.5, globalScale)); // Scale outline with zoom
+          ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+          
           // Draw text centered on node
           ctx.strokeText(label, x, y);
           ctx.fillText(label, x, y);
@@ -361,11 +337,6 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         >
           <p className="text-zinc-900 dark:text-zinc-100 font-medium">
             Similarity: {(hoveredLink.similarity * 100).toFixed(1)}%
-          </p>
-          <p className="text-zinc-600 dark:text-zinc-400 text-xs mt-1">
-            {hoveredLink.strength === 'strong' && 'Strong connection'}
-            {hoveredLink.strength === 'medium' && 'Medium connection'}
-            {hoveredLink.strength === 'weak' && 'Weak connection'}
           </p>
           <p className="text-zinc-500 dark:text-zinc-500 text-[10px] mt-2 italic">
             Click link for AI explanation

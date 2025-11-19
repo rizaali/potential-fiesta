@@ -66,28 +66,11 @@ export function buildKnowledgeGraph(entries, minSimilarity = 0.4) {
       
       // Only create links for entries with similarity >= minimum threshold
       if (similarity >= minSimilarity) {
-        // Determine strength category based on cosine similarity
-        let strength;
-        let isDotted;
-        
-        if (similarity >= 0.8) {
-          strength = 'strong'; // Solid, bold lines
-          isDotted = false;
-        } else if (similarity >= 0.6) {
-          strength = 'medium'; // Solid, medium lines
-          isDotted = false;
-        } else {
-          strength = 'weak'; // Dotted, thin lines
-          isDotted = true;
-        }
-        
         links.push({
           source: nodes[i].id,
           target: nodes[j].id,
-          similarity: similarity, // Store actual cosine similarity score
+          similarity: similarity, // Store actual cosine similarity score (0-1)
           value: similarity, // For link thickness calculation
-          strength: strength, // 'strong', 'medium', or 'weak'
-          isDotted: isDotted, // true for weak connections, false for strong/medium
         });
       }
       // No link created if similarity < minSimilarity (default 0.4)
