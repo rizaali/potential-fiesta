@@ -93,6 +93,7 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         body: JSON.stringify({
           sourceId: sourceId,
           targetId: targetId,
+          similarity: link.similarity, // Include similarity score for AI context
         }),
       });
 

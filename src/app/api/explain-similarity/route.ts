@@ -17,6 +17,7 @@ const openai = new OpenAI({
 interface ExplainSimilarityRequest {
   sourceId: string;
   targetId: string;
+  similarity?: number; // Cosine similarity score (0-1)
 }
 
 /**
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { sourceId, targetId } = body;
+    const { sourceId, targetId, similarity } = body;
 
     // Validate input
     if (!sourceId || typeof sourceId !== 'string' || sourceId.trim().length === 0) {
@@ -56,6 +57,15 @@ export async function POST(request: NextRequest) {
     if (!targetId || typeof targetId !== 'string' || targetId.trim().length === 0) {
       return NextResponse.json(
         { error: 'targetId is required and must be a non-empty string' },
+        { status: 400 }
+      );
+    }
+
+    // Validate similarity if provided
+    const similarityScore = similarity !== undefined ? Number(similarity) : null;
+    if (similarityScore !== null && (isNaN(similarityScore) || similarityScore < 0 || similarityScore > 1)) {
+      return NextResponse.json(
+        { error: 'similarity must be a number between 0 and 1' },
         { status: 400 }
       );
     }
@@ -114,8 +124,22 @@ export async function POST(request: NextRequest) {
     console.log('[API] Entry A title:', entryA.data.title);
     console.log('[API] Entry B title:', entryB.data.title);
 
-    // Construct the analysis prompt
-    const analysisPrompt = `Analyze the following two journal entries and summarize the top 3 core themes, emotions, or concepts they share. Be concise and write for a user hover tooltip. Format your response as a single sentence starting with "These two entries are both about" or similar phrasing.
+    // Construct the analysis prompt with similarity context
+    let similarityContext = '';
+    if (similarityScore !== null) {
+      const similarityPercent = (similarityScore * 100).toFixed(1);
+      let strengthDescription = '';
+      if (similarityScore >= 0.8) {
+        strengthDescription = 'very strong';
+      } else if (similarityScore >= 0.6) {
+        strengthDescription = 'moderate';
+      } else {
+        strengthDescription = 'weak';
+      }
+      similarityContext = `\n\nIMPORTANT CONTEXT: These entries have a ${similarityPercent}% semantic similarity (${strengthDescription} connection) based on their embedding vectors. Use this similarity score to inform your analysis - entries with higher similarity share more core themes, while lower similarity indicates more subtle or partial connections.`;
+    }
+
+    const analysisPrompt = `Analyze the following two journal entries and summarize the top 3 core themes, emotions, or concepts they share. Be concise and write for a user hover tooltip. Format your response as a single sentence starting with "These two entries are both about" or similar phrasing.${similarityContext}
 
 Entry 1:
 Title: ${entryA.data.title}
