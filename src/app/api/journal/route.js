@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateEmbedding } from '@/lib/embeddings';
 import { supabase } from '@/lib/supabase';
 
+// Route segment config for Next.js App Router
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 // Set max duration to 60 seconds to allow sufficient time for embedding generation
 // This is especially important for the first request when the model needs to be downloaded
 export const maxDuration = 60;
@@ -19,7 +23,17 @@ export const maxDuration = 60;
 export async function POST(request) {
   try {
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('[API] Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
     const { title, content } = body;
 
     // Validate input
