@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { getNodeColor } from '@/lib/graphUtils';
 
@@ -50,6 +50,7 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
   const containerRef = useRef<HTMLDivElement>(null);
   const hasZoomedToFit = useRef<boolean>(false);
   const mouseMoveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const tooltipPositionRef = useRef({ x: 0, y: 0 });
   
   // Cache for explanations to avoid repeated API calls
   const explanationCache = useRef<Map<string, string>>(new Map());
@@ -62,6 +63,23 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
       }
     };
   }, []);
+
+  // Memoize graph data to prevent unnecessary re-renders
+  const graphData = useMemo(() => ({ nodes, links }), [nodes, links]);
+
+  // Zoom to fit only once when graph first loads
+  useEffect(() => {
+    if (graphRef.current && !hasZoomedToFit.current && nodes.length > 0) {
+      hasZoomedToFit.current = true;
+      // Wait for graph to render before zooming
+      const timer = setTimeout(() => {
+        if (graphRef.current) {
+          graphRef.current.zoomToFit(400, 20);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [nodes.length]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (onNodeClick) {
@@ -149,25 +167,34 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
       ref={containerRef}
       className="w-full h-full min-h-[600px] bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative"
       onMouseMove={(e) => {
-        // Throttle tooltip position updates to prevent excessive re-renders
-        if (mouseMoveTimeoutRef.current) {
-          clearTimeout(mouseMoveTimeoutRef.current);
-        }
-        
-        mouseMoveTimeoutRef.current = setTimeout(() => {
-          if ((hoveredLink || clickedLink) && containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            setTooltipPosition({
-              x: e.clientX - rect.left,
-              y: e.clientY - rect.top,
+        // Update tooltip position using ref to avoid re-renders
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const newPos = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+          };
+          tooltipPositionRef.current = newPos;
+          // Only update state if tooltip is visible (triggers re-render for positioning)
+          // Use requestAnimationFrame to batch updates
+          if (hoveredLink || clickedLink) {
+            requestAnimationFrame(() => {
+              setTooltipPosition(newPos);
             });
           }
-        }, 16); // ~60fps update rate
+        }
+      }}
+      onMouseLeave={() => {
+        // Clear tooltips when mouse leaves the container
+        setHoveredLink(null);
+        if (!clickedLink) {
+          setExplanation(null);
+        }
       }}
     >
       <ForceGraph2D
         ref={graphRef}
-        graphData={{ nodes, links }}
+        graphData={graphData}
         nodeLabel={(node: any) => `${(node as GraphNode).title || node.id}`}
         nodeColor={(node: any) => {
           // Get color based on entry content
@@ -283,12 +310,9 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           handleNodeClick(node as GraphNode);
         }}
         cooldownTicks={100}
+        // Disable onEngineStop zoom to prevent bouncing - zoom only on initial mount
         onEngineStop={() => {
-          // Only zoom to fit once when graph first loads, not on every engine stop
-          if (graphRef.current && !hasZoomedToFit.current) {
-            hasZoomedToFit.current = true;
-            graphRef.current.zoomToFit(400, 20);
-          }
+          // Do nothing - zoom is handled on mount via useEffect
         }}
         nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
           const label = (node as GraphNode).title || node.id;
@@ -310,7 +334,10 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         onLinkHover={(link: any, prevLink: any) => {
           if (link) {
             setHoveredLink(link);
+            // Update tooltip position immediately when hovering
+            setTooltipPosition(tooltipPositionRef.current);
           } else {
+            // Clear hovered link when mouse leaves (but keep clicked link tooltip)
             setHoveredLink(null);
           }
         }}
