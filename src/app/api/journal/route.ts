@@ -10,6 +10,27 @@ export const runtime = 'nodejs';
 // This is especially important for the first request when the model needs to be downloaded
 export const maxDuration = 60;
 
+interface JournalEntryRequest {
+  title: string;
+  content: string;
+}
+
+/**
+ * GET /api/journal
+ * Returns route status for debugging/verification
+ */
+export async function GET() {
+  return NextResponse.json(
+    {
+      status: 'ok',
+      message: 'Journal API route is accessible',
+      methods: ['GET', 'POST'],
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200 }
+  );
+}
+
 /**
  * POST /api/journal
  * Creates a new journal entry with an embedding vector
@@ -20,10 +41,10 @@ export const maxDuration = 60;
  *   "content": "Journal entry content"
  * }
  */
-export async function POST(request) {
+export async function POST(request: NextRequest) {
   try {
     // Parse request body
-    let body;
+    let body: JournalEntryRequest;
     try {
       body = await request.json();
     } catch (parseError) {
@@ -54,7 +75,7 @@ export async function POST(request) {
     // Generate embedding for the content
     console.log('[API] Starting embedding generation for journal entry...');
     console.log('[API] Content length:', content.length);
-    let embedding;
+    let embedding: number[];
     try {
       embedding = await generateEmbedding(content);
       console.log(`[API] Embedding generated successfully with ${embedding.length} dimensions`);
@@ -78,7 +99,7 @@ export async function POST(request) {
       
       console.log('[API] Embedding validation passed');
       console.log('[API] Embedding sample (first 5 values):', embedding.slice(0, 5));
-    } catch (embeddingError) {
+    } catch (embeddingError: any) {
       console.error('[API] ========== EMBEDDING GENERATION FAILED ==========');
       console.error('[API] Error type:', embeddingError.constructor.name);
       console.error('[API] Error message:', embeddingError.message);
@@ -152,7 +173,7 @@ export async function POST(request) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Unexpected error in POST /api/journal:', error);
     return NextResponse.json(
       { error: `Internal server error: ${error.message}` },

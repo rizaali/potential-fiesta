@@ -133,11 +133,43 @@ export default function Home() {
           }),
         });
 
-        const result = await response.json();
-
+        // Check response status BEFORE parsing JSON
         if (!response.ok) {
-          console.error('[Frontend] API error:', result);
-          alert(`Failed to create entry: ${result.error || result.details || 'Unknown error'}. Please check the browser console for details.`);
+          // Handle specific HTTP status codes
+          if (response.status === 405) {
+            const errorText = await response.text().catch(() => 'Method Not Allowed');
+            console.error('[Frontend] 405 Method Not Allowed:', errorText);
+            alert('API route error: Method not allowed. The server may not be recognizing the POST method. Please check the deployment logs.');
+            return;
+          }
+
+          // Try to parse error response as JSON, but handle non-JSON responses
+          let errorData;
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              errorData = await response.json();
+            } catch (parseError) {
+              console.error('[Frontend] Failed to parse error response as JSON:', parseError);
+              errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+            }
+          } else {
+            const errorText = await response.text().catch(() => response.statusText);
+            errorData = { error: `HTTP ${response.status}: ${errorText || response.statusText}` };
+          }
+
+          console.error('[Frontend] API error:', errorData);
+          alert(`Failed to create entry: ${errorData.error || errorData.details || `HTTP ${response.status} error`}. Please check the browser console for details.`);
+          return;
+        }
+
+        // Response is OK, parse JSON
+        let result;
+        try {
+          result = await response.json();
+        } catch (parseError) {
+          console.error('[Frontend] Failed to parse success response as JSON:', parseError);
+          alert('Server returned an invalid response. Please try again.');
           return;
         }
 
@@ -153,6 +185,8 @@ export default function Home() {
         console.error('[Frontend] Error stack:', error.stack);
         if (error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
           alert('Network error: Unable to connect to the API. Please check your internet connection.');
+        } else if (error.message?.includes('JSON') || error.message?.includes('Unexpected end')) {
+          alert('Server response error: The server returned an invalid response. Please check the deployment logs.');
         } else {
           alert(`Failed to create entry: ${error.message || 'Unknown error'}. Please check the browser console for details.`);
         }
