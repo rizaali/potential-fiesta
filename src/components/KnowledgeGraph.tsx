@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { getNodeColor } from '@/lib/graphUtils';
 
@@ -42,6 +42,9 @@ interface KnowledgeGraphProps {
 
 export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeGraphProps) {
   const graphRef = useRef<any>(null);
+  const [hoveredLink, setHoveredLink] = useState<any>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (onNodeClick) {
@@ -60,7 +63,19 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
   }
 
   return (
-    <div className="w-full h-full min-h-[600px] bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
+    <div 
+      ref={containerRef}
+      className="w-full h-full min-h-[600px] bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative"
+      onMouseMove={(e) => {
+        if (hoveredLink && containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          setTooltipPosition({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+          });
+        }
+      }}
+    >
       <ForceGraph2D
         ref={graphRef}
         graphData={{ nodes, links }}
@@ -80,14 +95,14 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           return Math.max(5, Math.min(20, 5 + connections * 2));
         }}
         linkColor={(link: any) => {
-          // Vary color slightly by strength for better visual differentiation
+          // Use vibrant colors that work on both light and dark backgrounds
           const strength = link.strength || 'medium';
           if (strength === 'strong') {
-            return 'rgba(59, 130, 246, 0.6)'; // Blue for strong connections
+            return 'rgba(34, 197, 94, 0.8)'; // Bright green for strong connections
           } else if (strength === 'medium') {
-            return 'rgba(156, 163, 175, 0.5)'; // Gray for medium connections
+            return 'rgba(59, 130, 246, 0.7)'; // Bright blue for medium connections
           } else {
-            return 'rgba(156, 163, 175, 0.3)'; // Lighter gray for weak connections
+            return 'rgba(236, 72, 153, 0.6)'; // Pink for weak connections
           }
         }}
         linkWidth={(link: any) => {
@@ -123,13 +138,13 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           
           if (strength === 'strong') {
             lineWidth = 4;
-            color = 'rgba(59, 130, 246, 0.6)'; // Blue
+            color = 'rgba(34, 197, 94, 0.8)'; // Bright green
           } else if (strength === 'medium') {
             lineWidth = 2;
-            color = 'rgba(156, 163, 175, 0.5)'; // Gray
+            color = 'rgba(59, 130, 246, 0.7)'; // Bright blue
           } else {
             lineWidth = 1;
-            color = 'rgba(156, 163, 175, 0.3)'; // Light gray
+            color = 'rgba(236, 72, 153, 0.6)'; // Pink
           }
           
           ctx.strokeStyle = color;
@@ -186,15 +201,51 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         }}
         nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
           const label = (node as GraphNode).title || node.id;
-          const fontSize = 12 / globalScale;
+          const fontSize = Math.max(10, 12 / globalScale); // Minimum readable size
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.fillText(label, node.x || 0, (node.y || 0) + 8);
+          // Use white text with dark outline for visibility on all backgrounds
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.lineWidth = 3;
+          ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+          const x = node.x || 0;
+          const y = node.y || 0;
+          // Draw text centered on node
+          ctx.strokeText(label, x, y);
+          ctx.fillText(label, x, y);
         }}
         nodeCanvasObjectMode={() => 'after'}
+        onLinkHover={(link: any, prevLink: any) => {
+          if (link) {
+            setHoveredLink(link);
+          } else {
+            setHoveredLink(null);
+          }
+        }}
+        onBackgroundClick={() => setHoveredLink(null)}
       />
+      {/* Link similarity tooltip */}
+      {hoveredLink && (
+        <div
+          className="absolute bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-sm pointer-events-none z-10"
+          style={{
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+            transform: 'translate(-50%, -100%)',
+            marginTop: '-8px',
+          }}
+        >
+          <p className="text-zinc-900 dark:text-zinc-100 font-medium">
+            Similarity: {(hoveredLink.similarity * 100).toFixed(1)}%
+          </p>
+          <p className="text-zinc-600 dark:text-zinc-400 text-xs mt-1">
+            {hoveredLink.strength === 'strong' && 'Strong connection'}
+            {hoveredLink.strength === 'medium' && 'Medium connection'}
+            {hoveredLink.strength === 'weak' && 'Weak connection'}
+          </p>
+        </div>
+      )}
       <div className="absolute bottom-4 left-4 bg-white dark:bg-zinc-800 p-3 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-xs">
         <p className="text-zinc-600 dark:text-zinc-400 mb-1">
           <strong>Nodes:</strong> {nodes.length} entries
@@ -203,7 +254,7 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           <strong>Connections:</strong> {links.length} relationships
         </p>
         <p className="text-zinc-500 dark:text-zinc-500 text-[10px] mt-2">
-          Click nodes to view details • Drag to explore
+          Click nodes to view details • Hover links to see similarity • Drag to explore
         </p>
       </div>
     </div>
