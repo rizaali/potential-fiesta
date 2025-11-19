@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { getNodeColor } from '@/lib/graphUtils';
 
@@ -48,9 +48,20 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
   const [loadingExplanation, setLoadingExplanation] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasZoomedToFit = useRef<boolean>(false);
+  const mouseMoveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Cache for explanations to avoid repeated API calls
   const explanationCache = useRef<Map<string, string>>(new Map());
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (mouseMoveTimeoutRef.current) {
+        clearTimeout(mouseMoveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (onNodeClick) {
@@ -138,13 +149,20 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
       ref={containerRef}
       className="w-full h-full min-h-[600px] bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden relative"
       onMouseMove={(e) => {
-        if (hoveredLink && containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          setTooltipPosition({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-          });
+        // Throttle tooltip position updates to prevent excessive re-renders
+        if (mouseMoveTimeoutRef.current) {
+          clearTimeout(mouseMoveTimeoutRef.current);
         }
+        
+        mouseMoveTimeoutRef.current = setTimeout(() => {
+          if ((hoveredLink || clickedLink) && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setTooltipPosition({
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+            });
+          }
+        }, 16); // ~60fps update rate
       }}
     >
       <ForceGraph2D
@@ -266,7 +284,9 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
         }}
         cooldownTicks={100}
         onEngineStop={() => {
-          if (graphRef.current) {
+          // Only zoom to fit once when graph first loads, not on every engine stop
+          if (graphRef.current && !hasZoomedToFit.current) {
+            hasZoomedToFit.current = true;
             graphRef.current.zoomToFit(400, 20);
           }
         }}
