@@ -29,37 +29,68 @@ export function cosineSimilarity(vec1, vec2) {
 
 /**
  * Build graph data structure from journal entries with embeddings
+ * Uses cosine similarity to compare all entry pairs and creates links with visual styling
+ * based on similarity strength. Connections are deterministic (same entries = same connections).
+ * 
  * @param {Array} entries - Array of journal entries with embeddings
- * @param {number} similarityThreshold - Minimum similarity to create an edge (0-1)
+ * @param {number} minSimilarity - Minimum similarity to create a link (default: 0.4)
  * @returns {Object} Graph data with nodes and links
  */
-export function buildKnowledgeGraph(entries, similarityThreshold = 0.7) {
-  const nodes = entries
+export function buildKnowledgeGraph(entries, minSimilarity = 0.4) {
+  // Sort entries by ID for deterministic ordering (same entries always produce same graph)
+  const sortedEntries = [...entries]
     .filter(entry => entry.embedding && Array.isArray(entry.embedding))
-    .map((entry, index) => ({
-      id: entry.id,
-      title: entry.title,
-      content: entry.content,
-      createdAt: entry.created_at,
-      embedding: entry.embedding,
-      index: index,
-    }));
+    .sort((a, b) => {
+      // Sort by ID to ensure deterministic ordering
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
+
+  const nodes = sortedEntries.map((entry, index) => ({
+    id: entry.id,
+    title: entry.title,
+    content: entry.content,
+    createdAt: entry.created_at,
+    embedding: entry.embedding,
+    index: index,
+  }));
 
   const links = [];
   
-  // Calculate similarities between all pairs of entries
+  // Calculate cosine similarity between all pairs of entries
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
+      // Use cosine similarity to compare embeddings
       const similarity = cosineSimilarity(nodes[i].embedding, nodes[j].embedding);
       
-      if (similarity >= similarityThreshold) {
+      // Only create links for entries with similarity >= minimum threshold
+      if (similarity >= minSimilarity) {
+        // Determine strength category based on cosine similarity
+        let strength;
+        let isDotted;
+        
+        if (similarity >= 0.8) {
+          strength = 'strong'; // Solid, bold lines
+          isDotted = false;
+        } else if (similarity >= 0.6) {
+          strength = 'medium'; // Solid, medium lines
+          isDotted = false;
+        } else {
+          strength = 'weak'; // Dotted, thin lines
+          isDotted = true;
+        }
+        
         links.push({
           source: nodes[i].id,
           target: nodes[j].id,
-          similarity: similarity,
-          value: similarity, // For link thickness
+          similarity: similarity, // Store actual cosine similarity score
+          value: similarity, // For link thickness calculation
+          strength: strength, // 'strong', 'medium', or 'weak'
+          isDotted: isDotted, // true for weak connections, false for strong/medium
         });
       }
+      // No link created if similarity < minSimilarity (default 0.4)
     }
   }
 

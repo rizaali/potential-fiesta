@@ -353,9 +353,12 @@ export default function Home() {
   };
 
   // Build knowledge graph data
+  // Uses cosine similarity to compare all entry pairs
+  // Connections are deterministic (same entries = same connections)
   const graphData = useMemo<{ nodes: any[]; links: any[] }>(() => {
     if (viewMode === 'graph' && entries.length > 0) {
-      return buildKnowledgeGraph(entries, 0.7) as { nodes: any[]; links: any[] };
+      // Use default minSimilarity of 0.4 to show weak, medium, and strong connections
+      return buildKnowledgeGraph(entries, 0.4) as { nodes: any[]; links: any[] };
     }
     return { nodes: [], links: [] };
   }, [entries, viewMode]);

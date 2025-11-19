@@ -30,6 +30,8 @@ interface GraphLink {
   target: string | GraphNode;
   similarity: number;
   value: number;
+  strength?: 'strong' | 'medium' | 'weak';
+  isDotted?: boolean;
 }
 
 interface KnowledgeGraphProps {
@@ -77,8 +79,33 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           ).length;
           return Math.max(5, Math.min(20, 5 + connections * 2));
         }}
-        linkColor={() => 'rgba(156, 163, 175, 0.4)'} // gray links
-        linkWidth={(link: any) => Math.max(1, (link.value || link.similarity || 0.7) * 3)}
+        linkColor={(link: any) => {
+          // Vary color slightly by strength for better visual differentiation
+          const strength = link.strength || 'medium';
+          if (strength === 'strong') {
+            return 'rgba(59, 130, 246, 0.6)'; // Blue for strong connections
+          } else if (strength === 'medium') {
+            return 'rgba(156, 163, 175, 0.5)'; // Gray for medium connections
+          } else {
+            return 'rgba(156, 163, 175, 0.3)'; // Lighter gray for weak connections
+          }
+        }}
+        linkWidth={(link: any) => {
+          // Use strength categories for visual differentiation
+          const strength = link.strength || 'medium';
+          if (strength === 'strong') {
+            return 4; // Bold lines for strong connections
+          } else if (strength === 'medium') {
+            return 2; // Medium lines for medium connections
+          } else {
+            return 1; // Thin lines for weak connections
+          }
+        }}
+        linkStrokeDasharray={(link: any) => {
+          // Dotted lines for weak connections, solid for strong/medium
+          const isDotted = link.isDotted || false;
+          return isDotted ? '5,5' : undefined; // 5px dash, 5px gap for dotted lines
+        }}
         linkDirectionalArrowLength={6}
         linkDirectionalArrowRelPos={1}
         linkCurvature={0.2}
