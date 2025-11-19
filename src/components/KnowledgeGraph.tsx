@@ -101,14 +101,80 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
             return 1; // Thin lines for weak connections
           }
         }}
-        linkStrokeDasharray={(link: any) => {
-          // Dotted lines for weak connections, solid for strong/medium
-          const isDotted = link.isDotted || false;
-          return isDotted ? '5,5' : undefined; // 5px dash, 5px gap for dotted lines
-        }}
         linkDirectionalArrowLength={6}
         linkDirectionalArrowRelPos={1}
         linkCurvature={0.2}
+        linkCanvasObject={(link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+          // Draw custom link with dashed pattern for weak connections
+          const isDotted = link.isDotted || false;
+          const strength = link.strength || 'medium';
+          
+          // Get link coordinates
+          const start = typeof link.source === 'object' ? link.source : null;
+          const end = typeof link.target === 'object' ? link.target : null;
+          
+          if (!start || !end || !start.x || !start.y || !end.x || !end.y) {
+            return; // Skip if coordinates are not available
+          }
+          
+          // Set line style based on strength
+          let lineWidth;
+          let color;
+          
+          if (strength === 'strong') {
+            lineWidth = 4;
+            color = 'rgba(59, 130, 246, 0.6)'; // Blue
+          } else if (strength === 'medium') {
+            lineWidth = 2;
+            color = 'rgba(156, 163, 175, 0.5)'; // Gray
+          } else {
+            lineWidth = 1;
+            color = 'rgba(156, 163, 175, 0.3)'; // Light gray
+          }
+          
+          ctx.strokeStyle = color;
+          ctx.lineWidth = lineWidth;
+          
+          // Set dash pattern for weak connections
+          if (isDotted) {
+            ctx.setLineDash([5, 5]); // 5px dash, 5px gap
+          } else {
+            ctx.setLineDash([]); // Solid line
+          }
+          
+          // Draw the line
+          ctx.beginPath();
+          ctx.moveTo(start.x, start.y);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+          
+          // Draw arrow for directional links
+          const arrowLength = 6;
+          const arrowRelPos = 1; // Position at end of link
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const angle = Math.atan2(dy, dx);
+          const arrowX = start.x + dx * arrowRelPos;
+          const arrowY = start.y + dy * arrowRelPos;
+          
+          // Draw arrowhead
+          ctx.beginPath();
+          ctx.moveTo(arrowX, arrowY);
+          ctx.lineTo(
+            arrowX - arrowLength * Math.cos(angle - Math.PI / 6),
+            arrowY - arrowLength * Math.sin(angle - Math.PI / 6)
+          );
+          ctx.moveTo(arrowX, arrowY);
+          ctx.lineTo(
+            arrowX - arrowLength * Math.cos(angle + Math.PI / 6),
+            arrowY - arrowLength * Math.sin(angle + Math.PI / 6)
+          );
+          ctx.stroke();
+          
+          // Reset line dash
+          ctx.setLineDash([]);
+        }}
+        linkCanvasObjectMode={() => 'replace'} // Replace default link rendering
         onNodeClick={(node: any) => {
           handleNodeClick(node as GraphNode);
         }}
