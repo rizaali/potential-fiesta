@@ -19,13 +19,18 @@ interface JournalEntryRequest {
  * GET /api/journal
  * Returns route status for debugging/verification
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  console.log('[API] GET request received');
+  console.log('[API] Request method:', request.method);
+  console.log('[API] Request URL:', request.url);
+  
   return NextResponse.json(
     {
       status: 'ok',
       message: 'Journal API route is accessible',
       methods: ['GET', 'POST'],
       timestamp: new Date().toISOString(),
+      receivedMethod: request.method,
     },
     { status: 200 }
   );
@@ -42,6 +47,10 @@ export async function GET() {
  * }
  */
 export async function POST(request: NextRequest) {
+  console.log('[API] POST request received');
+  console.log('[API] Request method:', request.method);
+  console.log('[API] Request URL:', request.url);
+  
   try {
     // Parse request body
     let body: JournalEntryRequest;
