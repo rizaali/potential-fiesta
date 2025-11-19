@@ -43,14 +43,84 @@ interface KnowledgeGraphProps {
 export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeGraphProps) {
   const graphRef = useRef<any>(null);
   const [hoveredLink, setHoveredLink] = useState<any>(null);
+  const [clickedLink, setClickedLink] = useState<any>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [loadingExplanation, setLoadingExplanation] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Cache for explanations to avoid repeated API calls
+  const explanationCache = useRef<Map<string, string>>(new Map());
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     if (onNodeClick) {
       onNodeClick(node);
     }
   }, [onNodeClick]);
+
+  // Function to get entry ID from link source/target (handles both string and object formats)
+  const getEntryId = (sourceOrTarget: string | GraphNode): string => {
+    if (typeof sourceOrTarget === 'string') {
+      return sourceOrTarget;
+    }
+    return sourceOrTarget.id;
+  };
+
+  // Fetch similarity explanation from API
+  const fetchSimilarityExplanation = useCallback(async (link: any) => {
+    const sourceId = getEntryId(link.source);
+    const targetId = getEntryId(link.target);
+    
+    // Create cache key (sorted to handle both directions)
+    const cacheKey = [sourceId, targetId].sort().join('-');
+    
+    // Check cache first
+    if (explanationCache.current.has(cacheKey)) {
+      const cachedExplanation = explanationCache.current.get(cacheKey);
+      if (cachedExplanation) {
+        setExplanation(cachedExplanation);
+        return;
+      }
+    }
+
+    setLoadingExplanation(true);
+    setExplanation(null);
+
+    try {
+      const response = await fetch('/api/explain-similarity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: sourceId,
+          targetId: targetId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      const explanationText = result.explanation || 'Unable to generate explanation.';
+      
+      // Cache the explanation
+      explanationCache.current.set(cacheKey, explanationText);
+      setExplanation(explanationText);
+    } catch (error: any) {
+      console.error('[Graph] Error fetching explanation:', error);
+      setExplanation(`Error: ${error.message || 'Failed to load explanation'}`);
+    } finally {
+      setLoadingExplanation(false);
+    }
+  }, []);
+
+  // Handle link click
+  const handleLinkClick = useCallback((link: any, event: any) => {
+    event.stopPropagation(); // Prevent background click
+    setClickedLink(link);
+    fetchSimilarityExplanation(link);
+  }, [fetchSimilarityExplanation]);
 
   if (!nodes || nodes.length === 0) {
     return (
@@ -223,10 +293,15 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
             setHoveredLink(null);
           }
         }}
-        onBackgroundClick={() => setHoveredLink(null)}
+        onLinkClick={handleLinkClick}
+        onBackgroundClick={() => {
+          setHoveredLink(null);
+          setClickedLink(null);
+          setExplanation(null);
+        }}
       />
-      {/* Link similarity tooltip */}
-      {hoveredLink && (
+      {/* Link similarity tooltip - shows on hover */}
+      {hoveredLink && !clickedLink && (
         <div
           className="absolute bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-sm pointer-events-none z-10"
           style={{
@@ -244,6 +319,39 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
             {hoveredLink.strength === 'medium' && 'Medium connection'}
             {hoveredLink.strength === 'weak' && 'Weak connection'}
           </p>
+          <p className="text-zinc-500 dark:text-zinc-500 text-[10px] mt-2 italic">
+            Click link for AI explanation
+          </p>
+        </div>
+      )}
+      
+      {/* Link explanation tooltip - shows after click */}
+      {clickedLink && (
+        <div
+          className="absolute bg-white dark:bg-zinc-800 px-4 py-3 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-sm pointer-events-none z-10 max-w-md"
+          style={{
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+            transform: 'translate(-50%, -100%)',
+            marginTop: '-8px',
+          }}
+        >
+          <p className="text-zinc-900 dark:text-zinc-100 font-medium mb-2">
+            Similarity: {(clickedLink.similarity * 100).toFixed(1)}%
+          </p>
+          {loadingExplanation ? (
+            <p className="text-zinc-600 dark:text-zinc-400 text-xs italic">
+              Analyzing connection...
+            </p>
+          ) : explanation ? (
+            <p className="text-zinc-700 dark:text-zinc-300 text-xs leading-relaxed">
+              {explanation}
+            </p>
+          ) : (
+            <p className="text-zinc-600 dark:text-zinc-400 text-xs italic">
+              Click link to see explanation
+            </p>
+          )}
         </div>
       )}
       <div className="absolute bottom-4 left-4 bg-white dark:bg-zinc-800 p-3 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-xs">
@@ -254,7 +362,7 @@ export default function KnowledgeGraph({ nodes, links, onNodeClick }: KnowledgeG
           <strong>Connections:</strong> {links.length} relationships
         </p>
         <p className="text-zinc-500 dark:text-zinc-500 text-[10px] mt-2">
-          Click nodes to view details • Hover links to see similarity • Drag to explore
+          Click nodes to view details • Click links for AI explanation • Drag to explore
         </p>
       </div>
     </div>
