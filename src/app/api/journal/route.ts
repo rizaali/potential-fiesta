@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
         throw new Error(`Invalid embedding: expected array, got ${typeof embedding}`);
       }
       
-      // distilbert-base-uncased produces 768-dimensional embeddings
-      const expectedDimensions = 768;
+      // OpenAI text-embedding-3-small produces 1536-dimensional embeddings
+      const expectedDimensions = 1536;
       if (embedding.length !== expectedDimensions) {
         throw new Error(`Invalid embedding dimensions: expected ${expectedDimensions}, got ${embedding.length}`);
       }
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Final validation before insert
-    const expectedDimensions = 768; // distilbert-base-uncased produces 768 dimensions
+    const expectedDimensions = 1536; // OpenAI text-embedding-3-small produces 1536 dimensions
     if (!embedding || !Array.isArray(embedding) || embedding.length !== expectedDimensions) {
       console.error('[API] ========== CRITICAL: Embedding validation failed before insert ==========');
       console.error('[API] Embedding value:', embedding);
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
         {
           title: title.trim(),
           content: content.trim(),
-          embedding: embedding, // Store the 768-dimensional vector
+          embedding: embedding, // Store the 1536-dimensional vector
         },
       ])
       .select()
